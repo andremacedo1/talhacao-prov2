@@ -3,7 +3,6 @@
  * MÓDULO: page.tsx (Orquestrador Principal)
  * DESCRIÇÃO: Página principal que reúne Cadastro, Chão de Fábrica e Histórico.
  * AUTOR: André Macedo da Rosa / Arquiteto Sênior
- * DATA/HORA DE CRIAÇÃO: 2026-08-03 11:55
  * ============================================================================
  */
 
@@ -46,7 +45,7 @@ export default function Home() {
                 const dados = JSON.parse(e.target.result);
                 if (Array.isArray(dados)) {
                     setHistorico(dados);
-                    alert(`✅ ${dados.length} registros importados com sucesso! Teste os dados reais liberado.`);
+                    alert(`✅ ${dados.length} registros importados com sucesso!`);
                 }
             } catch (err) {
                 alert('Erro ao ler o arquivo JSON de backup.');
@@ -56,10 +55,10 @@ export default function Home() {
     };
 
     return (
-        <main className="container" style={{ padding: '20px' }}>
-            <div className="header">
-                <h2>Alto Vale Talhação - PRO v2 (Homologação)</h2>
-                <div className="status-nuvem">🟢 Ambiente de Testes Ativo</div>
+        <main style={{ maxWidth: '900px', margin: '0 auto', padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid var(--borda)', paddingBottom: '15px' }}>
+                <h2 style={{ fontSize: '22px', fontWeight: 'bold' }}>Alto Vale Talhação - PRO v2</h2>
+                <div style={{ fontSize: '13px', background: '#065f46', color: '#34d399', padding: '4px 10px', borderRadius: '20px' }}>🟢 Ambiente de Testes Ativo</div>
             </div>
 
             <CadastroClientes onSalvarCliente={handleSalvarCliente} />

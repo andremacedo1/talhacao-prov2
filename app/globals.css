@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --fundo: #0f172a;
+  --card: #1e293b;
+  --texto: #f8fafc;
+  --borda: #334155;
+  --azul: #2563eb;
+  --verde: #16a34a;
+  --amarelo: #ca8a04;
+}
+
+body {
+  background-color: var(--fundo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+input, select {
+  background-color: #0f172a;
+  border: 1px solid var(--borda);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  outline: none;
+  font-size: 14px;
+  width: 100%;
+}
+
+input:focus {
+  border-color: var(--azul);
+}
+
+.acao {
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-primary {
+  background-color: var(--azul);
+  color: #fff;
+}
+.btn-primary:hover {
+  background-color: #1d4ed8;
+}
+
+.btn-success {
+  background-color: var(--verde);
+  color: #fff;
+}
+.btn-success:hover {
+  background-color: #15803d;
+}
