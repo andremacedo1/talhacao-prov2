@@ -1,202 +1,224 @@
 /**
  * ============================================================================
- * MÓDULO: FormularioOS.tsx (Com Cache de Sessão em Tempo Real)
+ * MÓDULO: components/FormularioOS.tsx
+ * DESCRIÇÃO: Formulário de O.S. Fiel ao HTML Original (Datalist e Grade Dinâmica).
  * AUTOR: André Macedo da Rosa / Arquiteto Sênior
+ * DATA/HORA DE ALTERAÇÃO: 2026-08-03 17:35
+ * REGRAS DE NEGÓCIO: 
+ * 1. Restauração do DataList de Clientes e botão de Limpar (🗑️).
+ * 2. Restauração 100% da Lógica de Matriz Dinâmica (minhaGradePro) com Adicionar/Excluir Colunas de Tamanho.
+ * 3. Integração com botão "Repetir" (re-popula o state com OS anterior).
  * ============================================================================
  */
 
 'use client';
-
 import React, { useState, useEffect } from 'react';
+import { db } from '../lib/firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
-const TAM_DEFAULT = ["34", "36", "38", "40", "42", "44", "P", "M", "G", "GG"];
+const TAM_DEFAULT = ["34","36","38","40","42","44","P","M","G","GG"];
 
-interface LinhaCorMatriz {
-    id: string;
-    cor: string;
-    quantidades: { [tamanho: string]: number };
-}
-
-export default function FormularioOS({ onSalvarOS }: { onSalvarOS: (osData: any) => void }) {
+export default function FormularioOS({ clientesDb, osCarregada, clearOsCarregada, onSuccess }: any) {
+    const [tamanhosGrade, setTamanhosGrade] = useState<string[]>(TAM_DEFAULT);
+    
     const [cliente, setCliente] = useState('');
     const [ref, setRef] = useState('');
     const [produto, setProduto] = useState('');
+    const [dataSaida, setDataSaida] = useState(new Date().toISOString().split('T')[0]);
+    const [dataRetorno, setDataRetorno] = useState('');
+    const [responsavel, setResponsavel] = useState('');
     const [statusPagamento, setStatusPagamento] = useState('PENDENTE');
     const [valorCorte, setValorCorte] = useState('');
     const [mPlotter, setMPlotter] = useState('');
-    const [vPlotter, setVPlotter] = useState('');
-    const [linhas, setLinhas] = useState<LinhaCorMatriz[]>([
-        { id: '1', cor: 'BRANCO', quantidades: {} }
-    ]);
+    const [vPlotter, setVPlotter] = useState('10,00'); // Padrão do HTML original
+    const [linhas, setLinhas] = useState<any[]>([{ id: Date.now(), cor: '', quantidades: {} }]);
 
-    // Carregar cache de sessão ao abrir (Anti-Perda)
+    // Restaurando custom grade local
     useEffect(() => {
-        const cacheSalvo = localStorage.getItem('talhacao_os_draft');
-        if (cacheSalvo) {
-            try {
-                const dados = JSON.parse(cacheSalvo);
-                setCliente(dados.cliente || '');
-                setRef(dados.ref || '');
-                setProduto(dados.produto || '');
-                if (dados.linhas) setLinhas(dados.linhas);
-            } catch (e) { console.error("Erro ao carregar rascunho"); }
-        }
+        try {
+            const saved = localStorage.getItem('minhaGradePro');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) setTamanhosGrade(parsed);
+            }
+        } catch(e) { console.error(e) }
     }, []);
 
-    // Salvar cache de sessão em tempo real a cada alteração
+    // Ação do Botão Repetir O.S. do Histórico
     useEffect(() => {
-        const rascunho = { cliente, ref, produto, linhas };
-        localStorage.setItem('talhacao_os_draft', JSON.stringify(rascunho));
-    }, [cliente, ref, produto, linhas]);
-
-    const handleAdicionarCor = () => {
-        setLinhas([...linhas, { id: Date.now().toString(), cor: '', quantidades: {} }]);
-    };
-
-    const handleQtdChange = (linhaId: string, tamanho: string, valor: string) => {
-        const qtd = parseInt(valor) || 0;
-        setLinhas(linhas.map(l => {
-            if (l.id === linhaId) {
-                return { ...l, quantidades: { ...l.quantidades, [tamanho]: qtd } };
+        if (osCarregada) {
+            setCliente(osCarregada.cliente || ''); setRef(osCarregada.ref || ''); setProduto(osCarregada.produto || '');
+            setResponsavel(osCarregada.responsavel || ''); setValorCorte(osCarregada.valorCorte?.toString().replace('.',',') || '');
+            setMPlotter(osCarregada.mPlotter?.toString().replace('.',',') || ''); setVPlotter(osCarregada.valorPlotter?.toString().replace('.',',') || '10,00');
+            setStatusPagamento(osCarregada.statusPagamento || 'PENDENTE');
+            
+            // Remapeando o objeto 'itens' da O.S. repetida para a grade matricial
+            let coresMap: any = {};
+            let novosTamanhos = [...tamanhosGrade];
+            for (let k in osCarregada.itens) {
+                let partes = k.split(" - ");
+                let cor = partes.length > 1 ? partes[0] : "SEM COR";
+                let tam = partes.length > 1 ? partes[1] : partes[0];
+                if (!coresMap[cor]) coresMap[cor] = {};
+                coresMap[cor][tam] = osCarregada.itens[k];
+                if (!novosTamanhos.includes(tam)) novosTamanhos.push(tam);
             }
-            return l;
-        }));
+            setTamanhosGrade(novosTamanhos);
+            
+            const novasLinhas = Object.keys(coresMap).map((c, i) => ({
+                id: Date.now() + i, cor: c === "SEM COR" ? "" : c, quantidades: coresMap[c]
+            }));
+            setLinhas(novasLinhas.length > 0 ? novasLinhas : [{ id: Date.now(), cor: '', quantidades: {} }]);
+            clearOsCarregada();
+        }
+    }, [osCarregada]);
+
+    // Matriz - Controles de Tamanhos (Colunas)
+    const adicionarTamanho = () => {
+        const novos = [...tamanhosGrade, "NOVO"];
+        setTamanhosGrade(novos);
+        localStorage.setItem('minhaGradePro', JSON.stringify(novos));
     };
 
-    const totalPecas = linhas.reduce((acc, linha) => {
-        const somaLinha = Object.values(linha.quantidades).reduce((a, b) => a + b, 0);
-        return acc + somaLinha;
-    }, 0);
+    const atualizarTamanho = (index: number, valor: string) => {
+        const novos = [...tamanhosGrade];
+        novos[index] = valor.toUpperCase();
+        setTamanhosGrade(novos);
+        localStorage.setItem('minhaGradePro', JSON.stringify(novos));
+    };
 
+    const removerTamanho = (index: number) => {
+        if(confirm("Excluir esta coluna de tamanho?")) {
+            const novos = tamanhosGrade.filter((_, i) => i !== index);
+            setTamanhosGrade(novos);
+            localStorage.setItem('minhaGradePro', JSON.stringify(novos));
+        }
+    };
+
+    // Cálculos
+    const totalPecas = linhas.reduce((acc, linha) => acc + Object.values(linha.quantidades as Record<string, number>).reduce((a, b) => a + (b || 0), 0), 0);
     const vCorteNum = parseFloat(valorCorte.replace(',', '.')) || 0;
     const mPlotterNum = parseFloat(mPlotter.replace(',', '.')) || 0;
     const vPlotterNum = parseFloat(vPlotter.replace(',', '.')) || 0;
     const totalValor = (totalPecas * vCorteNum) + (mPlotterNum * vPlotterNum);
 
-    const handleSalvar = () => {
-        if (!cliente || !produto) {
-            alert('Preencha o cliente e o produto.');
-            return;
-        }
+    const handleSalvar = async () => {
+        if (!cliente) return alert('O Nome do cliente é obrigatório!');
+        if (totalPecas === 0 && mPlotterNum === 0) return alert("Preencha a grade de peças ou o plotter.");
 
-        const osData = {
-            id: Date.now().toString(),
-            cliente: cliente.toUpperCase(),
-            ref,
-            produto: produto.toUpperCase(),
-            dataSaida: new Date().toISOString().split('T')[0],
-            statusPagamento,
-            valorCorte: vCorteNum,
-            mPlotter: mPlotterNum,
-            vPlotter: vPlotterNum,
-            totalPecas,
-            total: totalValor,
-            linhas
-        };
+        let itens: any = {};
+        linhas.forEach(l => {
+            let corStr = l.cor.trim().toUpperCase() || "SEM COR";
+            tamanhosGrade.forEach(tam => {
+                let q = l.quantidades[tam] || 0;
+                if (q > 0) {
+                    let chave = corStr === "SEM COR" ? tam : `${corStr} - ${tam}`;
+                    itens[chave] = (itens[chave] || 0) + q;
+                }
+            });
+        });
 
-        onSalvarOS(osData);
-        localStorage.removeItem('talhacao_os_draft'); // Limpa rascunho ao salvar com sucesso
-        setCliente('');
-        setRef('');
-        setProduto('');
-        setLinhas([{ id: Date.now().toString(), cor: 'BRANCO', quantidades: {} }]);
+        try {
+            await addDoc(collection(db, "historico"), {
+                cliente: cliente.toUpperCase(), ref, produto, dataSaida, dataRetorno, responsavel,
+                valorCorte: vCorteNum, mPlotter: mPlotterNum, valorPlotter: vPlotterNum,
+                itens, totalPecas, total: totalValor, statusPagamento, timestamp: Date.now()
+            });
+
+            // Limpa form fiel ao original
+            setCliente(''); setRef(''); setProduto(''); setDataRetorno(''); setResponsavel('');
+            setValorCorte(''); setMPlotter(''); setStatusPagamento('PENDENTE');
+            setLinhas([{ id: Date.now(), cor: '', quantidades: {} }]);
+            setDataSaida(new Date().toISOString().split('T')[0]);
+            
+            alert('💾 Ordem de Serviço Salva!');
+            onSuccess();
+        } catch(e) { alert("Erro ao salvar. Verifique sua conexão."); }
     };
 
     return (
-        <div style={{ background: '#111827', padding: '24px', borderRadius: '16px', border: '1px solid #1f2937', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3)', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ color: '#38bdf8', fontSize: '18px', fontWeight: 'bold' }}>⚙️ Nova Ordem de Serviço (Chão de Fábrica)</h3>
-                <span style={{ fontSize: '11px', background: '#1e293b', color: '#94a3b8', padding: '4px 8px', borderRadius: '6px' }}>💾 Cache de Sessão Ativo</span>
+        <div style={{ background: 'var(--card)', padding: '20px', borderRadius: '10px', border: '1px solid var(--borda)', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <h3 style={{ marginTop: 0, borderBottom: '2px solid var(--azul)', paddingBottom: '10px', fontSize: '18px' }}>📝 Nova Ordem de Serviço</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+                <div>
+                    <label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Cliente</label>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                        <input className="padrao" value={cliente} onChange={(e) => setCliente(e.target.value)} placeholder="Nome..." list="listaClientesOpts" />
+                        <button className="acao btn-danger" onClick={() => setCliente('')} title="Remover Cliente">🗑️</button>
+                    </div>
+                    <datalist id="listaClientesOpts">
+                        {clientesDb.map((c: any) => <option key={c.id} value={c.razaoSocial || c.nome} />)}
+                    </datalist>
+                </div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Ref / Modelo</label><input className="padrao" value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Referência..." /></div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Produto</label><input className="padrao" value={produto} onChange={(e) => setProduto(e.target.value)} placeholder="Ex: Calça Jeans" /></div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px', marginBottom: '16px' }}>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Cliente / Apelido</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="Nome do cliente" value={cliente} onChange={(e) => setCliente(e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Referência (Ref)</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="Ex: 1025" value={ref} onChange={(e) => setRef(e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Produto / Artigo</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="Ex: Calça Sarja" value={produto} onChange={(e) => setProduto(e.target.value)} />
-                </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Data Saída</label><input type="date" className="padrao" value={dataSaida} onChange={(e) => setDataSaida(e.target.value)} /></div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Data Retorno</label><input type="date" className="padrao" value={dataRetorno} onChange={(e) => setDataRetorno(e.target.value)} /></div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Responsável</label><input className="padrao" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="Assinatura..." /></div>
             </div>
 
-            <div style={{ overflowX: 'auto', marginBottom: '16px', borderRadius: '8px', border: '1px solid #1f2937' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '13px' }}>
-                    <thead>
-                        <tr style={{ background: '#1f2937', color: '#38bdf8' }}>
-                            <th style={{ padding: '10px', textAlign: 'left' }}>Cor</th>
-                            {TAM_DEFAULT.map(t => <th key={t} style={{ padding: '10px' }}>{t}</th>)}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {linhas.map((linha) => (
-                            <tr key={linha.id} style={{ borderBottom: '1px solid #1f2937' }}>
-                                <td style={{ padding: '8px', textAlign: 'left' }}>
-                                    <input 
-                                        style={{ width: '130px', padding: '6px', background: '#030712', border: '1px solid #374151', color: '#fff', borderRadius: '6px', textTransform: 'uppercase' }} 
-                                        placeholder="COR" 
-                                        value={linha.cor} 
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setLinhas(linhas.map(l => l.id === linha.id ? { ...l, cor: val } : l));
-                                        }} 
-                                    />
-                                </td>
-                                {TAM_DEFAULT.map(t => (
-                                    <td key={t} style={{ padding: '8px' }}>
-                                        <input 
-                                            type="number" 
-                                            min="0" 
-                                            style={{ width: '50px', textAlign: 'center', padding: '6px', background: '#030712', border: '1px solid #374151', color: '#fff', borderRadius: '6px' }} 
-                                            value={linha.quantidades[t] || ''} 
-                                            onChange={(e) => handleQtdChange(linha.id, t, e.target.value)} 
-                                        />
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            <button type="button" style={{ background: '#1f2937', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '20px' }} onClick={handleAdicionarCor}>
-                + Adicionar Cor na Grade
-            </button>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '15px' }}>
                 <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Status Financeiro</label>
-                    <select style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} value={statusPagamento} onChange={(e) => setStatusPagamento(e.target.value)}>
-                        <option value="PENDENTE">🔴 Pendente</option>
-                        <option value="PAGO">🟢 Pago</option>
+                    <label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Status Finan.</label>
+                    <select className="padrao" value={statusPagamento} onChange={(e) => setStatusPagamento(e.target.value)}>
+                        <option value="PENDENTE">🔴 Pendente</option><option value="PAGO">🟢 Pago</option>
                     </select>
                 </div>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>R$ Corte (Un)</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="1,25" value={valorCorte} onChange={(e) => setValorCorte(e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Metros Plotter</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="0" value={mPlotter} onChange={(e) => setMPlotter(e.target.value)} />
-                </div>
-                <div>
-                    <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>R$ Plotter (Metro)</label>
-                    <input style={{ background: '#030712', border: '1px solid #374151', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }} placeholder="10,00" value={vPlotter} onChange={(e) => setVPlotter(e.target.value)} />
-                </div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>R$ Corte (Un)</label><input className="padrao" value={valorCorte} onChange={(e) => setValorCorte(e.target.value)} placeholder="1,25" /></div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>Plotter (M)</label><input className="padrao" value={mPlotter} onChange={(e) => setMPlotter(e.target.value)} placeholder="0" /></div>
+                <div><label style={{ fontSize: '10px', fontWeight: 'bold', color: 'var(--subtexto)', textTransform: 'uppercase' }}>R$ Plotter (M)</label><input className="padrao" value={vPlotter} onChange={(e) => setVPlotter(e.target.value)} placeholder="10,00" /></div>
             </div>
 
-            <div style={{ background: '#030712', padding: '16px', borderRadius: '12px', border: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div><span style={{ fontSize: '11px', color: '#94a3b8' }}>TOTAL PEÇAS</span><br /><span style={{ fontSize: '22px', color: '#38bdf8', fontWeight: 'bold' }}>{totalPecas}</span></div>
-                <div style={{ textAlign: 'right' }}><span style={{ fontSize: '11px', color: '#94a3b8' }}>VALOR TOTAL O.S.</span><br /><span style={{ fontSize: '22px', color: '#4ade80', fontWeight: 'bold' }}>R$ {totalValor.toFixed(2)}</span></div>
+            <label style={{ marginTop: '15px', marginBottom: 0, fontSize: '12px', color: 'var(--azul)', fontWeight: 'bold' }}>Tabela Matriz (Adicione Cores e Tamanhos)</label>
+            <div style={{ overflowX: 'auto', paddingBottom: '10px', background: 'rgba(0,0,0,0.02)', padding: '15px', borderRadius: '8px', border: '1px solid var(--borda)', marginTop: '5px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 'max-content' }}>
+                    {/* Headers da Matriz Dinâmica */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'flex-end', paddingBottom: '5px', borderBottom: '2px solid var(--borda)' }}>
+                        <div style={{ width: '140px', flexShrink: 0, display: 'flex', alignItems: 'center', fontWeight: 'bold', fontSize: '11px', color: 'var(--subtexto)' }}>CORES (LOTES)</div>
+                        {tamanhosGrade.map((t, i) => (
+                            <div key={i} style={{ width: '65px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <div style={{ cursor: 'pointer', color: 'var(--vermelho)', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }} onClick={() => removerTamanho(i)} title="Remover Tamanho">✖</div>
+                                <input type="text" style={{ border: 'none', borderBottom: '1px dashed var(--azul)', background: 'transparent', color: 'var(--texto)', fontSize: '13px', fontWeight: 'bold', width: '100%', textAlign: 'center', paddingBottom: '4px' }} value={t} onChange={(e) => atualizarTamanho(i, e.target.value)} />
+                            </div>
+                        ))}
+                        <div style={{ width: '40px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="btn-add-col" onClick={adicionarTamanho} title="Adicionar Tamanho">+</div>
+                        </div>
+                    </div>
+                    {/* Linhas de Cor */}
+                    {linhas.map((linha, lIndex) => (
+                        <div key={linha.id} style={{ display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center' }}>
+                            <div style={{ width: '140px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <button style={{ background: 'var(--vermelho)', color: '#fff', borderRadius: '6px', border: 'none', padding: '10px 12px', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setLinhas(linhas.filter(x => x.id !== linha.id))}>X</button>
+                                <input type="text" className="input-cor" placeholder="Ex: Azul" value={linha.cor} onChange={(e) => { const n = [...linhas]; n[lIndex].cor = e.target.value; setLinhas(n); }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {tamanhosGrade.map((t, i) => (
+                                    <div key={i} style={{ width: '65px', flexShrink: 0 }}>
+                                        <input type="number" className="tam-qtd" placeholder="-" value={linha.quantidades[t] || ''} onChange={(e) => {
+                                            const n = [...linhas]; 
+                                            n[lIndex].quantidades[t] = parseInt(e.target.value) || 0; 
+                                            setLinhas(n);
+                                        }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
-            
-            <button style={{ width: '100%', background: 'linear-gradient(to right, #2563eb, #1d4ed8)', color: '#fff', border: 'none', padding: '14px', borderRadius: '10px', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)' }} onClick={handleSalvar}>
-                💾 SALVAR E REGISTRAR ORDEM DE SERVIÇO
-            </button>
+            <button className="acao btn-success" style={{ width: '100%', marginTop: '5px' }} onClick={() => setLinhas([...linhas, { id: Date.now(), cor: '', quantidades: {} }])}>➕ ADICIONAR NOVA COR</button>
+
+            <div className="total-box">
+                <div>TOTAL PEÇAS:<br/><span>{totalPecas}</span></div>
+                <div style={{ textAlign: 'right' }}>VALOR TOTAL:<br/><span>R$ {totalValor.toFixed(2).replace('.',',')}</span></div>
+            </div>
+
+            <button className="acao btn-primary" onClick={handleSalvar}>💾 SALVAR E GERAR O.S.</button>
         </div>
     );
 }

@@ -1,62 +1,49 @@
+/*
+ * ============================================================================
+ * MÓDULO: app/globals.css
+ * DESCRIÇÃO: Estilização Global Fiel ao HTML Original com Dark Mode Dinâmico.
+ * AUTOR: André Macedo da Rosa / Arquiteto Sênior
+ * DATA/HORA DE ALTERAÇÃO: 2026-08-03 17:35
+ * REGRAS DE NEGÓCIO: Variáveis CSS exatas do HTML raiz. Transições de tema restauradas.
+ * ============================================================================
+ */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --fundo: #030712;
-  --card: #111827;
-  --texto: #f9fafb;
-  --borda: #1f2937;
-  --azul: #2563eb;
-  --verde: #16a34a;
+  --azul: #00AEEF; --verde: #10b981; --vermelho: #ef4444; --amarelo: #f59e0b;
+  --bg: #f4f7f6; --card: #ffffff; --texto: #111; --subtexto: #555; --borda: #cbd5e1; --input-bg: #fff;
 }
 
-body {
-  background-color: var(--fundo);
-  color: var(--texto);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  margin: 0;
-  padding: 0;
+html.dark-mode { 
+  --bg: #0f172a; --card: #1e293b; --texto: #f8fafc; --subtexto: #94a3b8; --borda: #334155; --input-bg: #0f172a; 
 }
 
-input, select {
-  background-color: #030712;
-  border: 1px solid #374151;
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 8px;
-  outline: none;
-  font-size: 14px;
-  width: 100%;
-  transition: border-color 0.2s;
-}
+* { transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
 
-input:focus, select:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
-}
+body { background: var(--bg); color: var(--texto); font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; }
 
-.acao {
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
+input.padrao, select.padrao { 
+    padding: 10px; width: 100%; border: 1px solid var(--borda); border-radius: 6px; 
+    background: var(--input-bg); color: var(--texto); 
 }
+input.padrao:focus, select.padrao:focus { outline: none; border-color: var(--azul); }
 
-.btn-primary {
-  background-color: var(--azul);
-  color: #fff;
-}
-.btn-primary:hover {
-  background-color: #1d4ed8;
-}
+.acao { padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; border: none; }
+.btn-primary { background: var(--azul); color: #fff; width: 100%; font-size: 16px; padding: 15px; margin-top: 15px; }
+.btn-success { background: var(--verde); color: #fff; }
+.btn-danger { background: var(--vermelho); color: #fff; padding: 10px; }
+.btn-backup { background: transparent; color: var(--texto); border: 1px solid var(--borda); font-size: 12px; padding: 6px 12px; }
 
-.btn-success {
-  background-color: var(--verde);
-  color: #fff;
-}
-.btn-success:hover {
-  background-color: #15803d;
-}
+.total-box { display: flex; justify-content: space-between; align-items: center; background: rgba(16,185,129,0.1); border: 1px solid var(--verde); padding: 15px; border-radius: 8px; margin-top: 15px; }
+.total-box span { font-size: 20px; font-weight: bold; color: var(--verde); }
+
+/* Tema Toggle */
+.theme-toggle { position: fixed; top: 20px; right: 20px; background: transparent; border: none; cursor: pointer; font-size: 24px; z-index: 1000; }
+
+/* Matriz Dinâmica */
+.tam-qtd { width: 100%; padding: 10px 2px; text-align: center; border: 1px solid var(--borda); border-radius: 6px; font-weight: bold; font-size: 15px; background: var(--input-bg); color: var(--texto); }
+.input-cor { width: 100%; padding: 10px 8px; border: 1px solid var(--borda); border-radius: 6px; font-weight: bold; background: var(--input-bg); color: var(--texto); text-transform: uppercase; }
+.btn-add-col { cursor: pointer; color: var(--azul); font-size: 20px; font-weight: bold; border: 1px dashed var(--azul); border-radius: 4px; height: 38px; width: 40px; display: flex; align-items: center; justify-content: center; }

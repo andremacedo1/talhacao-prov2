@@ -1,8 +1,11 @@
 /**
  * ============================================================================
- * MÓDULO: page.tsx (Orquestrador Definitivo com Guias/Tabs)
- * DESCRIÇÃO: Layout fiel ao original com navegação em abas para não poluir a tela.
+ * MÓDULO: app/page.tsx
+ * DESCRIÇÃO: Orquestrador Principal Fiel ao HTML Original (Com Sistema de Abas).
  * AUTOR: André Macedo da Rosa / Arquiteto Sênior
+ * DATA/HORA DE ALTERAÇÃO: 2026-08-03 18:45
+ * REGRAS DE NEGÓCIO: 
+ * 1. Imagens do logotipo (logoApp e logoEmpresaHTML) restauradas no cabeçalho.
  * ============================================================================
  */
 
@@ -13,116 +16,92 @@ import CadastroClientes, { ClienteOficial } from '../components/CadastroClientes
 import FormularioOS from '../components/FormularioOS';
 import HistoricoAcoes from '../components/HistoricoAcoes';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
 
 export default function Home() {
-    const [historico, setHistorico] = useState<any[]>([]);
+    const [abaAtiva, setAbaAtiva] = useState('os');
+    const [isOnline, setIsOnline] = useState(true);
+    const [isDark, setIsDark] = useState(false);
     const [clientes, setClientes] = useState<ClienteOficial[]>([]);
-    const [carregando, setCarregando] = useState(true);
-    
-    // Controle de Guias (Tabs) - Padrão: Lançamento de O.S.
-    const [abaAtiva, setAbaAtiva] = useState('os'); 
+    const [osParaRepetir, setOsParaRepetir] = useState<any>(null); 
 
     useEffect(() => {
-        sincronizarComFirebase();
+        if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark-mode');
+            setIsDark(true);
+        }
+        window.addEventListener('online', () => setIsOnline(true));
+        window.addEventListener('offline', () => setIsOnline(false));
+        carregarClientesGerais();
     }, []);
 
-    const sincronizarComFirebase = async () => {
+    const carregarClientesGerais = async () => {
         try {
-            setCarregando(true);
-            const q = query(collection(db, 'historico'), orderBy('id', 'desc'));
-            const querySnapshot = await getDocs(q);
-            const listaOS: any[] = [];
-            querySnapshot.forEach((doc) => {
-                listaOS.push({ ...doc.data(), firebaseId: doc.id });
-            });
-            setHistorico(listaOS);
-
-            const snapClientes = await getDocs(collection(db, 'clientes'));
-            const listaC: ClienteOficial[] = [];
-            snapClientes.forEach((doc) => {
-                listaC.push({ ...doc.data(), id: doc.id } as ClienteOficial);
-            });
-            setClientes(listaC);
+            const snap = await getDocs(collection(db, 'clientes'));
+            const lista: ClienteOficial[] = [];
+            snap.forEach(doc => lista.push({ ...doc.data(), id: doc.id } as ClienteOficial));
+            setClientes(lista);
         } catch (error) {
-            console.error("Erro ao sincronizar com Firestore:", error);
-        } finally {
-            setCarregando(false);
+            console.error("Aviso: operando com cache local de clientes.");
         }
+    };
+
+    const toggleTheme = () => {
+        const h = document.documentElement;
+        h.classList.toggle("dark-mode");
+        const dark = h.classList.contains('dark-mode');
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
+        setIsDark(dark);
     };
 
     const handleSalvarCliente = async (novoCliente: ClienteOficial) => {
         try {
             await addDoc(collection(db, 'clientes'), novoCliente);
-            setClientes(prev => [...prev, novoCliente]);
-            alert('✅ Cliente e De/Para cadastrados com sucesso!');
-            setAbaAtiva('os'); // Volta pra O.S. após cadastrar
+            setClientes([...clientes, novoCliente]);
+            alert('✅ Cliente e De/Para cadastrados!');
+            setAbaAtiva('os');
         } catch (error) {
-            alert('Erro ao salvar cliente na nuvem.');
+            alert('❌ Erro ao salvar cliente no banco de dados.');
         }
     };
 
-    const handleSalvarOS = async (novaOS: any) => {
-        try {
-            await addDoc(collection(db, 'historico'), novaOS);
-            setHistorico(prev => [novaOS, ...prev]);
-            alert('✅ Ordem de Serviço registrada com sucesso!');
-            setAbaAtiva('historico'); // Vai pro Dashboard ver a O.S. salva
-        } catch (error) {
-            alert('Erro ao salvar O.S. na nuvem.');
-        }
+    const acionarRepetirOS = (os: any) => {
+        setOsParaRepetir(os);
+        setAbaAtiva('os'); 
     };
-
-    const exportarBackup = () => { /* Mantido igual */ };
-    const restaurarBackup = (event: any) => { /* Mantido igual */ };
 
     return (
-        <main style={{ minHeight: '100vh', background: '#030712' }}>
-            {/* CABEÇALHO / TOPO DO SISTEMA (Idêntico ao padrão original) */}
-            <header style={{ 
-                background: '#111827', 
-                padding: '15px 30px', 
-                borderBottom: '2px solid #1f2937', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '30px' }}>
-                    <h1 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
-                        ✂️ Alto Vale Talhação
-                    </h1>
-                    
-                    {/* NAVEGAÇÃO EM GUIAS */}
-                    <nav style={{ display: 'flex', gap: '10px' }}>
-                        <button 
-                            onClick={() => setAbaAtiva('os')} 
-                            style={{ background: abaAtiva === 'os' ? '#2563eb' : 'transparent', color: abaAtiva === 'os' ? '#fff' : '#94a3b8', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            📝 Lançar O.S.
-                        </button>
-                        <button 
-                            onClick={() => setAbaAtiva('historico')} 
-                            style={{ background: abaAtiva === 'historico' ? '#2563eb' : 'transparent', color: abaAtiva === 'historico' ? '#fff' : '#94a3b8', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            📊 Dashboard & Histórico
-                        </button>
-                        <button 
-                            onClick={() => setAbaAtiva('clientes')} 
-                            style={{ background: abaAtiva === 'clientes' ? '#2563eb' : 'transparent', color: abaAtiva === 'clientes' ? '#fff' : '#94a3b8', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            👥 Clientes (De/Para)
-                        </button>
-                    </nav>
-                </div>
-                <div style={{ fontSize: '12px', background: '#065f46', color: '#34d399', padding: '6px 12px', borderRadius: '20px', fontWeight: 'bold' }}>
-                    {carregando ? '⏳ Sincronizando...' : '🟢 Online (talhacao-dev)'}
-                </div>
-            </header>
+        <>
+            <button className="theme-toggle" onClick={toggleTheme} title="Alternar Tema">{isDark ? '☀️' : '🌓'}</button>
 
-            {/* ÁREA DE TRABALHO (Renderiza apenas a guia selecionada) */}
-            <div style={{ maxWidth: '1000px', margin: '30px auto', padding: '0 20px' }}>
-                {abaAtiva === 'os' && <FormularioOS onSalvarOS={handleSalvarOS} />}
+            <main style={{ maxWidth: '950px', margin: 'auto', padding: '20px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+                    {/* LOGOTIPOS ORIGINAIS DO HTML RESTAURADOS */}
+                    <img id="logoEmpresaHTML" src="/logo.png" style={{ display: 'none' }} alt="Logo Oculta para PDF" />
+                    <img src="/logo.png" alt="Alto Vale" id="logoApp" style={{ maxWidth: '180px', margin: '0 auto' }} onError={(e) => e.currentTarget.style.display='none'} />
+                    
+                    <h2 style={{ marginTop: '10px', marginBottom: '5px' }}>Alto Vale Talhação</h2>
+                    <div className="status-nuvem" style={!isOnline ? {color: 'var(--vermelho)', borderColor: 'var(--vermelho)', background: 'rgba(239,68,68,0.1)'} : {}}>
+                        {isOnline ? '🟢 Sincronizado' : '🔴 Offline (Salvo localmente)'}
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '5px', marginBottom: '15px' }}>
+                    <button className={`acao ${abaAtiva === 'os' ? 'btn-primary' : ''}`} style={{ marginTop: 0, border: '1px solid var(--borda)', background: abaAtiva === 'os' ? 'var(--azul)' : 'transparent', color: abaAtiva === 'os' ? '#fff' : 'var(--texto)'}} onClick={() => setAbaAtiva('os')}>📝 Lançar O.S.</button>
+                    <button className={`acao ${abaAtiva === 'historico' ? 'btn-primary' : ''}`} style={{ marginTop: 0, border: '1px solid var(--borda)', background: abaAtiva === 'historico' ? 'var(--azul)' : 'transparent', color: abaAtiva === 'historico' ? '#fff' : 'var(--texto)'}} onClick={() => setAbaAtiva('historico')}>📊 Dashboard & Histórico</button>
+                    <button className={`acao ${abaAtiva === 'clientes' ? 'btn-primary' : ''}`} style={{ marginTop: 0, border: '1px solid var(--borda)', background: abaAtiva === 'clientes' ? 'var(--azul)' : 'transparent', color: abaAtiva === 'clientes' ? '#fff' : 'var(--texto)'}} onClick={() => setAbaAtiva('clientes')}>👥 Clientes (De/Para)</button>
+                </div>
+
+                {abaAtiva === 'os' && <FormularioOS clientesDb={clientes} osCarregada={osParaRepetir} clearOsCarregada={() => setOsParaRepetir(null)} onSuccess={() => setAbaAtiva('historico')} />}
+                {abaAtiva === 'historico' && <HistoricoAcoes clientesDb={clientes} onRepetir={acionarRepetirOS} />}
                 {abaAtiva === 'clientes' && <CadastroClientes onSalvarCliente={handleSalvarCliente} />}
-                {abaAtiva === 'historico' && <HistoricoAcoes historico={historico} onExportarBackup={exportarBackup} onRestaurarBackup={restaurarBackup} />}
-            </div>
-        </main>
+
+                <footer style={{ textAlign: 'center', padding: '20px', marginTop: '20px', borderTop: '1px solid var(--borda)', fontSize: '12px', color: 'var(--subtexto)', lineHeight: '1.6' }}>
+                    <p>&copy; 2026 Alto Vale Talhação - Licença de Uso</p>
+                    <p>Software Arquitetado e Desenvolvido por <strong style={{color: 'var(--azul)'}}>André Macedo da Rosa</strong></p>
+                    <p>Propriedade Intelectual | Contato: <a style={{color: 'var(--azul)', textDecoration: 'none', fontWeight: 'bold'}} href="mailto:andremacedo1@gmail.com">andremacedo1@gmail.com</a></p>
+                </footer>
+            </main>
+        </>
     );
 }
